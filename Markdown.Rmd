@@ -1,0 +1,150 @@
+---
+title: "Plotly vis"
+output:
+  html_document:
+    code_folding: hide
+---
+
+### Introduction
+R is a great tool for working with data. Data manipulation becomes a piece of cake and it has a lot to offer for story telling and visualisation. ggplot2 is a great package for static visuals and it works great for the majority of the data projects. That being said, there are situations when adding interactive plots can improve the story you are trying to tell with your analysis. 
+Plotly is a great package for creating interactive plots and it’s very similar to ggplot2, so you can pick it up really quick. 
+If you really want to feel the power of plotly you can use it in combination with shiny web apps but this is for another time. 
+
+ 
+
+```{r include = FALSE}
+library(tidyverse)
+library(plotly)
+
+turnout <- read_csv("https://raw.githubusercontent.com/Nikiboy26/Visualisation-in-R/main/TurnoutRates.csv")
+senate_winners <- read_csv("https://raw.githubusercontent.com/Nikiboy26/Visualisation-in-R/main/senate_winners.csv")
+
+fundrasing <- read_csv("https://raw.githubusercontent.com/Nikiboy26/Visualisation-in-R/main/fundraising.csv")
+
+fl_boundaries <- read_csv("https://raw.githubusercontent.com/Nikiboy26/Visualisation-in-R/main/fl_boundaries.csv")
+
+fl_results <- read_csv("https://raw.githubusercontent.com/Nikiboy26/Visualisation-in-R/main/fl_results.csv")
+```
+
+### Midterm election 2018 data 
+Election data is a good example of how interactive graphs can facilitate data story-telling. The data has information on the US Midterm Election in 2018. You can find it here.   
+
+
+### Highest Turnout
+First let's see what states had the highest turnout in 2018. 
+
+```{r }
+turnout %>%
+  top_n(15, wt = turnout2018) %>%
+  plot_ly(x = ~turnout2018, y = ~fct_reorder(state, turnout2018)) %>%
+  add_markers() %>%
+  layout(xaxis = list(title = "Turnout"), 
+         yaxis = list(title = "State", type = "category"))
+
+```
+
+<br>
+
+Usually the turnout for midterm elections is not very high. This was not the case for 2018. Let's see how 2018 was different compared to the previous elections. 
+
+### Turnout Change 
+
+```{r }
+# Scatterplot of turnout2018 against turnout2014
+turnout %>%
+  plot_ly(x = ~turnout2014, y = ~turnout2018) %>%
+  add_markers(hoverinfo = 'text',
+              text = ~paste('State:', state, "<br>",
+                "2014:", turnout2014, '<br>',
+                            "2018:", turnout2018)) %>%
+  layout(xaxis = list(title = '2014'),
+         yaxis = list(title = '2018')) %>%
+  add_lines(x = c(.25, .6), y = c(.25, .6), line = list(color = 'grey', #Hoverinfo helps to see the numbers
+                                                        dash="dot")) %>% #But this line really helps to see that number grew
+  layout(showlegend = FALSE)
+```
+
+
+Here we can see that the turnover grew in almost every state except Louisiana and Alaska. 
+
+Below you can see how the turnover changed for all the states. 
+
+### Turnout Change Map
+
+```{r }
+turnout %>%
+  mutate(change = turnout2018 - turnout2014) %>%
+  plot_geo(locationmode = "USA-states",
+           hoverinfo = "text", 
+           text = ~paste("State:", state, "<br>",
+                         "Change:", round(change,2))) %>%
+  add_trace(z = ~change, locations =~state.abbr) %>%
+  layout(geo = list(scope = 'usa'))
+```
+
+
+### Fundraising
+Both parties felt important to get the seats in the Senate and a lot of money was spent on candidates. What candidates spent the most?
+
+```{r }
+# Create a dotplot of the top 15 Senate campaigns
+fundrasing %>%
+  filter(office == "S") %>%
+  top_n(15, wt = receipts) %>%
+  plot_ly(x = ~receipts, y = ~fct_reorder(state, receipts),
+          color = ~fct_drop(party),
+          hoverinfo = "text",
+          text = ~paste("Candidate:", name, "<br>",
+                        "Party:", party, "<br>",
+                        "Receipts:", receipts, "<br>",
+                        "Disbursements:", disbursement)) %>%
+  add_markers(colors = c('blue', 'red'))%>%
+  layout(xaxis = list(title = 'Raised'),
+         yaxis = list(title = 'State'),
+         showlegend = FALSE)
+```
+
+<br>
+
+Let's see who actually won the elections. 
+
+### Senate Winner by State
+```{r }
+senate_winners %>%
+  mutate(party = as.factor(party))%>%
+  plot_geo(locationmode = 'USA-states') %>%
+  add_trace(z =  ~as.numeric(party), 
+            locations = ~state,
+            colors = c('dodgerblue', 'mediumseagreen', 'tomato'),
+            hoverinfo = "text",
+            text = ~paste("Candidate:", name, "<br>",
+                          "Party:", party, "<br>",
+                          "% vote:", round(pct.vote, 1))
+  ) %>%
+  layout(geo = list(scope = 'usa'))%>% 
+  hide_colorbar()
+```
+
+### FLORIDA 
+There was a lot of controversy around the elections. Especially in Florida.
+The race was too close to call, and the recount process was as controversial as the race.
+
+Here is re-creation of a county-level map of the percentage of the two-party vote that the Republican candidate, Rick Scott (who actually won the election), received according to the first set of results.
+
+
+```{r }
+senate_vote <- left_join(fl_boundaries, fl_results, by = c("subregion" = "CountyName"))
+
+# Specify the axis settings to polish the map
+map_axes <- list(title = '', showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE)
+
+# Create a polished county-level choropleth map of Pctvote
+senate_vote %>%
+  group_by(group) %>%
+  plot_ly(x = ~long, y = ~lat, 
+          color = ~Pctvote,
+          split = ~subregion) %>%
+  add_polygons(line = list(width = 0.4), showlegend = FALSE, colors = c("blue", "red")) %>%
+  layout(xaxis = map_axes, yaxis = map_axes)
+```
+
